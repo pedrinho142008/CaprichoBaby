@@ -48,3 +48,8 @@ backup_caprichobaby_*/
 backup_visual_instagram_*/
 dist/
 node_modules/
+
+# Scripts temporários locais
+/ajustar_caprichobaby.py
+/atualizar_caprichobaby.py
+/conectar_admin.py
