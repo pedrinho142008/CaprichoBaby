@@ -1,0 +1,110 @@
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Logo maior e próxima do menu */
+.brand-logo {
+  width: 180px;
+  height: 76px;
+  max-width: 48vw;
+  object-fit: contain;
+  object-position: left center;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* Cabeçalho: menu e logo alinhados */
+header .brand-logo {
+  margin-left: 14px;
+}
+
+@media (max-width: 600px) {
+  .brand-logo {
+    width: 155px;
+    height: 68px;
+    max-width: 46vw;
+  }
+
+  header .brand-logo {
+    margin-left: 10px;
+  }
+}
+
+@media (min-width: 900px) {
+  .brand-logo {
+    width: 220px;
+    height: 88px;
+  }
+
+  header .brand-logo {
+    margin-left: 18px;
+  }
+}
+
+/* Cabeçalho mobile: hambúrguer + logo grande lado a lado */
+@media (max-width: 600px) {
+  header .brand-logo,
+  .brand-logo {
+    width: 200px !important;
+    height: 84px !important;
+    max-width: none !important;
+    object-fit: contain !important;
+    object-position: left center !important;
+    margin: 0 0 0 8px !important;
+    flex-shrink: 0 !important;
+  }
+
+  header {
+    gap: 0 !important;
+  }
+
+  header button,
+  header [aria-label*="menu" i],
+  header [aria-label*="Menu" i] {
+    flex-shrink: 0;
+  }
+}
+
+/* Logo maior no computador também */
+@media (min-width: 601px) {
+  header .brand-logo,
+  .brand-logo {
+    width: 240px !important;
+    height: 96px !important;
+    max-width: none !important;
+    object-fit: contain !important;
+    margin-left: 12px !important;
+    flex-shrink: 0 !important;
+  }
+}
+
+/* Corrige o seletor global para aplicar box-sizing em todos os elementos */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
