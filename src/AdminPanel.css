@@ -1027,3 +1027,64 @@
   .cb-category-add button, .cb-category-edit button { flex: 1; justify-content: center; }
   .cb-category-row { align-items: flex-start; }
 }
+
+/* CaprichoBaby: impedir que usuários ultrapassem o painel */
+.cb-panel {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.cb-category-list {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.cb-category-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.cb-category-row > div:first-child {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.cb-category-row b,
+.cb-category-row small {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.cb-category-actions {
+  flex: 0 0 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 480px) {
+  .cb-panel {
+    padding: 14px;
+  }
+
+  .cb-category-row {
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .cb-category-actions {
+    gap: 4px;
+  }
+
+  .cb-category-actions .cb-icon-action {
+    flex-shrink: 0;
+  }
+}

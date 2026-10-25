@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft, Package, ShoppingBag, Plus, Search, Pencil, Trash2,
   ImagePlus, X, Save, ClipboardList, CheckCircle2, Clock3,
-  MessageCircle, Eye, EyeOff, Upload, LayoutDashboard, Users, Tags
+  MessageCircle, Eye, EyeOff, Upload, LayoutDashboard, Users, Tags, UserPlus
 } from "lucide-react";
 import "./AdminPanel.css";
+import { supabase } from "./supabase";
 
 const DEFAULT_CATEGORIES = ["Roupinhas", "Vestidos", "Brinquedos", "Acessórios", "Presentes"];
-const CLOTHING_SIZES = ["RN", "P", "M", "G", "GG", "1", "2", "3", "4", "6", "8", "10", "12", "14", "16"];
+const CLOTHING_SIZES = ["P", "M", "G", "GG", "1", "2", "3", "4", "6", "8", "10", "12", "14", "16"];
 const SHOE_SIZES = ["15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"];
 const SIZELESS_CATEGORIES = ["Brinquedos", "Presentes", "Acessórios"];
 const STATUSES = ["Novo", "Em atendimento", "Aguardando pagamento", "Concluído", "Cancelado"];
@@ -28,7 +29,10 @@ const emptyProduct = {
   image: "", imageUrl: "", images: [], description: "", active: true, sizes: []
 };
 
-function AdminPanel({ products, setProducts, onClose }) {
+function AdminPanel({ products: externalProducts, setProducts: setExternalProducts, onClose }) {
+  const [localProducts, setLocalProducts] = useState([]);
+  const products = externalProducts ?? localProducts;
+  const setProducts = setExternalProducts ?? setLocalProducts;
   const [tab, setTab] = useState("inicio");
   const [categories, setCategories] = useState(() => {
     const saved = read("caprichobaby_categories", DEFAULT_CATEGORIES);
@@ -54,10 +58,57 @@ function AdminPanel({ products, setProducts, onClose }) {
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("Todas");
   const [notice, setNotice] = useState("");
+  const [adminUserForm, setAdminUserForm] = useState({
+    name: "", email: "", password: ""
+  });
+  const [adminUserBusy, setAdminUserBusy] = useState(false);
+  const [adminUserMessage, setAdminUserMessage] = useState("");
+  const [managedUsers, setManagedUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [editingManagedUser, setEditingManagedUser] = useState(null);
+  const [managedUserForm, setManagedUserForm] = useState({
+    name: "", email: "", password: ""
+  });
+
+
   const [orderFormOpen, setOrderFormOpen] = useState(false);
   const [orderForm, setOrderForm] = useState({ customer: "", phone: "", items: "", total: "", notes: "" });
   const [photoBusy, setPhotoBusy] = useState(false);
   const fileRef = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadAdminProducts() {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        console.error("Erro ao carregar produtos administrativos:", error);
+        flash("Não foi possível carregar os produtos do Supabase.");
+        return;
+      }
+
+      if (active) {
+        setProducts((data || []).map((p) => ({
+          ...p,
+          imageUrl: p.image_url || p.image || "",
+          images: Array.isArray(p.images) ? p.images : [],
+          oldPrice: p.old_price ?? null,
+          sizes: Array.isArray(p.sizes) ? p.sizes : [],
+          tag: p.tag || "Novidade",
+          emoji: p.emoji || "🎀",
+          color: p.color || "product-pink"
+        })));
+      }
+    }
+
+    loadAdminProducts();
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     try { localStorage.setItem("caprichobaby_orders", JSON.stringify(orders)); } catch {}
@@ -66,10 +117,6 @@ function AdminPanel({ products, setProducts, onClose }) {
   useEffect(() => {
     try { localStorage.setItem("caprichobaby_waitlist", JSON.stringify(waitlist)); } catch {}
   }, [waitlist]);
-
-  useEffect(() => {
-    try { localStorage.setItem("caprichobaby_products", JSON.stringify(products)); } catch {}
-  }, [products]);
 
   useEffect(() => {
     try { localStorage.setItem("caprichobaby_categories", JSON.stringify(categories)); } catch {}
@@ -253,39 +300,177 @@ function AdminPanel({ products, setProducts, onClose }) {
     });
   }
 
-  function saveProduct(event) {
+  async function uploadProductImages(images) {
+    const uploaded = [];
+
+    for (const [index, image] of (images || []).entries()) {
+      if (typeof image !== "string" || !image) continue;
+
+      if (/^https?:\/\//i.test(image)) {
+        uploaded.push(image);
+        continue;
+      }
+
+      if (!image.startsWith("data:image/")) {
+        throw new Error("Uma das fotos tem formato inválido.");
+      }
+
+      const response = await fetch(image);
+      const blob = await response.blob();
+      const extension = blob.type === "image/png" ? "png"
+        : blob.type === "image/webp" ? "webp" : "jpg";
+      const path = `${crypto.randomUUID()}-${index}.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("product-images")
+        .upload(path, blob, {
+          contentType: blob.type || "image/jpeg",
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage
+        .from("product-images")
+        .getPublicUrl(path);
+
+      uploaded.push(data.publicUrl);
+    }
+
+    return uploaded;
+  }
+
+  async function saveProduct(event) {
     event.preventDefault();
-    if (!form.name.trim() || form.price === "" || Number(form.price) < 0) {
+
+    if (!form.name.trim() || form.price === "" ||
+        !Number.isFinite(Number(form.price)) || Number(form.price) < 0) {
       flash("Informe o nome e um preço válido.");
       return;
     }
-    const saved = {
-      ...form,
-      id: editing ?? makeId(),
-      name: form.name.trim(),
-      price: Number(form.price),
-      oldPrice: form.oldPrice === "" ? null : Number(form.oldPrice),
-      imageUrl: form.images?.[0] || form.imageUrl || "",
-      images: form.images || [],
-      active: Boolean(form.active)
-    };
-    setProducts((current) => editing === null
-      ? [saved, ...current]
-      : current.map((p) => p.id === editing ? saved : p));
-    setTab("produtos");
-    setEditing(null);
-    flash(editing === null ? "Produto cadastrado com sucesso!" : "Produto atualizado!");
+
+    if (photoBusy) {
+      flash("Aguarde o processamento das fotos.");
+      return;
+    }
+
+    setPhotoBusy(true);
+
+    try {
+      const images = await uploadProductImages(form.images || []);
+      const imageUrl = images[0] || (
+        /^https?:\/\//i.test(form.imageUrl || "") ? form.imageUrl : ""
+      );
+
+      const payload = {
+        name: form.name.trim(),
+        description: form.description || "",
+        price: Number(form.price),
+        old_price: form.oldPrice === "" || form.oldPrice == null
+          ? null : Number(form.oldPrice),
+        category: form.category || "Roupinhas",
+        image: imageUrl,
+        image_url: imageUrl,
+        images,
+        sizes: Array.isArray(form.sizes) ? form.sizes : [],
+        active: Boolean(form.active),
+        tag: form.tag || "Novidade",
+        emoji: form.emoji || "🎀",
+        color: form.color || "product-pink",
+        updated_at: new Date().toISOString()
+      };
+
+      let result;
+      if (editing === null) {
+        result = await supabase
+          .from("products")
+          .insert(payload)
+          .select("*")
+          .single();
+      } else {
+        result = await supabase
+          .from("products")
+          .update(payload)
+          .eq("id", editing)
+          .select("*")
+          .single();
+      }
+
+      if (result.error) throw result.error;
+
+      const row = result.data;
+      const saved = {
+        ...row,
+        imageUrl: row.image_url || row.image || "",
+        oldPrice: row.old_price ?? null,
+        images: Array.isArray(row.images) ? row.images : [],
+        sizes: Array.isArray(row.sizes) ? row.sizes : []
+      };
+
+      setProducts((current) => editing === null
+        ? [saved, ...current]
+        : current.map((product) => product.id === editing ? saved : product));
+
+      setTab("produtos");
+      setEditing(null);
+      setForm(emptyProduct);
+      flash(editing === null
+        ? "Produto cadastrado no Supabase!"
+        : "Produto atualizado no Supabase!");
+    } catch (error) {
+      console.error("Erro ao salvar produto:", error);
+      flash(`Não foi possível salvar: ${error.message || "verifique o Supabase e as permissões."}`);
+    } finally {
+      setPhotoBusy(false);
+    }
   }
 
-  function deleteProduct(product) {
+  async function deleteProduct(product) {
     if (!window.confirm(`Excluir "${product.name}" do catálogo?`)) return;
-    setProducts((current) => current.filter((p) => p.id !== product.id));
-    flash("Produto excluído.");
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .eq("id", product.id);
+
+      if (error) throw error;
+
+      setProducts((current) => current.filter((p) => p.id !== product.id));
+      flash("Produto excluído do catálogo.");
+    } catch (error) {
+      console.error("Erro ao excluir produto:", error);
+      flash(`Não foi possível excluir: ${error.message}`);
+    }
   }
 
-  function toggleActive(product) {
-    setProducts((current) => current.map((p) => p.id === product.id ? { ...p, active: p.active === false } : p));
-    flash(product.active === false ? "Produto voltou a ficar disponível." : "Produto ocultado da loja.");
+  async function toggleActive(product) {
+    const active = product.active === false;
+
+    try {
+      const { data, error } = await supabase
+        .from("products")
+        .update({ active, updated_at: new Date().toISOString() })
+        .eq("id", product.id)
+        .select("*")
+        .single();
+
+      if (error) throw error;
+
+      setProducts((current) => current.map((p) =>
+        p.id === product.id
+          ? { ...p, ...data, imageUrl: data.image_url || data.image || p.imageUrl,
+              oldPrice: data.old_price ?? p.oldPrice }
+          : p
+      ));
+
+      flash(active
+        ? "Produto voltou a ficar disponível."
+        : "Produto ocultado da loja.");
+    } catch (error) {
+      console.error("Erro ao alterar disponibilidade:", error);
+      flash(`Não foi possível alterar: ${error.message}`);
+    }
   }
 
   function createOrder(event) {
@@ -321,11 +506,50 @@ function AdminPanel({ products, setProducts, onClose }) {
     flash("Pedido removido.");
   }
 
+
+  async function managedUserError(error) {
+    let message = error?.message || "Erro na operação.";
+    try {
+      if (error?.context && typeof error.context.json === "function") {
+        const body = await error.context.json();
+        if (body?.error) message = body.error;
+      }
+    } catch {}
+    return message;
+  }
+
+  async function callAdminFunction(body) {
+    const { data, error } = await supabase.functions.invoke(
+      "admin-create", { body }
+    );
+    if (error) throw new Error(await managedUserError(error));
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function loadManagedUsers() {
+    setUsersLoading(true);
+    setAdminUserMessage("");
+    try {
+      const data = await callAdminFunction({ action: "list" });
+      setManagedUsers(Array.isArray(data?.users) ? data.users : []);
+    } catch (error) {
+      setAdminUserMessage(error.message || "Falha ao carregar usuários.");
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (tab === "usuarios") loadManagedUsers();
+  }, [tab]);
+
   const nav = [
     { id: "inicio", label: "Visão geral", icon: LayoutDashboard },
     { id: "produtos", label: "Produtos", icon: Package },
     { id: "categorias", label: "Categorias", icon: Tags },
-    { id: "pedidos", label: "Fila de espera", icon: Users }
+    { id: "pedidos", label: "Fila de espera", icon: Users },
+    { id: "usuarios", label: "Usuários", icon: UserPlus }
   ];
 
   if (tab === "produto-form") {
@@ -462,6 +686,203 @@ function AdminPanel({ products, setProducts, onClose }) {
               </div>
               <p className="cb-help-note">Ao renomear uma categoria, os produtos vinculados são atualizados. Categorias com produtos não podem ser excluídas.</p>
             </section>
+          </>}
+
+          {tab === "usuarios" && <>
+            <div className="cb-page-heading">
+              <div>
+                <span className="cb-eyebrow">ACESSO À LOJA</span>
+                <h1>Gerenciar usuários</h1>
+                <p>Consulte contas e gerencie o acesso administrativo.</p>
+              </div>
+              <button className="cb-secondary" type="button"
+                onClick={loadManagedUsers} disabled={usersLoading}>
+                {usersLoading ? "Atualizando..." : "Atualizar lista"}
+              </button>
+            </div>
+
+            {adminUserMessage && <p className="cb-help-note" role="status">
+              {adminUserMessage}
+            </p>}
+
+            <section className="cb-panel">
+              <h2><UserPlus size={20} /> Novo administrador</h2>
+              <form className="cb-product-form" onSubmit={async event => {
+                event.preventDefault();
+                setAdminUserBusy(true);
+                setAdminUserMessage("");
+                try {
+                  await callAdminFunction({
+                    action: "create",
+                    name: adminUserForm.name.trim(),
+                    email: adminUserForm.email.trim(),
+                    password: adminUserForm.password
+                  });
+                  setAdminUserForm({name:"",email:"",password:""});
+                  setAdminUserMessage("Administrador criado.");
+                  await loadManagedUsers();
+                } catch(error) {
+                  setAdminUserMessage(error.message || "Erro ao criar administrador.");
+                } finally {
+                  setAdminUserBusy(false);
+                }
+              }}>
+                <label>Nome completo
+                  <input required value={adminUserForm.name}
+                    onChange={e => setAdminUserForm(old => ({...old,name:e.target.value}))}
+                    placeholder="Nome do administrador"/>
+                </label>
+                <label>E-mail de acesso
+                  <input required type="email" value={adminUserForm.email}
+                    onChange={e => setAdminUserForm(old => ({...old,email:e.target.value}))}
+                    placeholder="pessoa@exemplo.com"/>
+                </label>
+                <label>Senha inicial
+                  <input required type="password" minLength={8}
+                    value={adminUserForm.password}
+                    onChange={e => setAdminUserForm(old => ({...old,password:e.target.value}))}
+                    placeholder="Mínimo de 8 caracteres"/>
+                </label>
+                <div className="cb-form-actions">
+                  <button className="cb-primary" type="submit" disabled={adminUserBusy}>
+                    <UserPlus size={17}/>
+                    {adminUserBusy ? "Criando..." : "Criar administrador"}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section className="cb-panel">
+              <h2>Usuários cadastrados ({managedUsers.length})</h2>
+              <label>Buscar por nome ou e-mail
+                <input value={userSearch}
+                  onChange={e => setUserSearch(e.target.value)}
+                  placeholder="Digite para pesquisar..."/>
+              </label>
+
+              {usersLoading ? <p className="cb-help-note">Carregando usuários...</p> :
+                managedUsers.filter(u =>
+                  `${u.name || ""} ${u.email || ""}`.toLowerCase()
+                    .includes(userSearch.toLowerCase())
+                ).length === 0
+                  ? <p className="cb-help-note">
+                      {adminUserMessage
+                        ? "Não foi possível carregar a lista. Veja o erro acima."
+                        : "Nenhum usuário encontrado."}
+                    </p>
+                  : <div className="cb-category-list">
+                    {managedUsers.filter(u =>
+                      `${u.name || ""} ${u.email || ""}`.toLowerCase()
+                        .includes(userSearch.toLowerCase())
+                    ).map(user => <div className="cb-category-row" key={user.id}>
+                      <div style={{minWidth:0,flex:1}}>
+                        <b>{user.name || "Nome não informado"}</b>
+                        <small>{user.email || "E-mail indisponível"}</small>
+                        <small>{user.role === "admin" ? "Administrador" : "Cliente"}</small>
+                      </div>
+                      <div className="cb-category-actions">
+                        <button type="button" className="cb-icon-action"
+                          title="Editar usuário" aria-label="Editar usuário"
+                          onClick={() => {
+                            setEditingManagedUser(user);
+                            setManagedUserForm({
+                              name:user.name || "",
+                              email:user.email || "",
+                              password:""
+                            });
+                          }}><Pencil size={16}/></button>
+
+                        {user.role === "admin" && <button type="button"
+                          className="cb-icon-action" title="Retirar acesso administrativo"
+                          onClick={async () => {
+                            if (!window.confirm(
+                              `Retirar o acesso administrativo de ${user.email}? A conta será mantida como cliente.`
+                            )) return;
+                            try {
+                              await callAdminFunction({action:"demote",id:user.id});
+                              setAdminUserMessage("Acesso administrativo removido.");
+                              await loadManagedUsers();
+                            } catch(error) {
+                              setAdminUserMessage(error.message || "Falha ao alterar acesso.");
+                            }
+                          }}><EyeOff size={16}/></button>}
+
+                        <button type="button" className="cb-icon-action"
+                          title="Excluir conta permanentemente"
+                          onClick={async () => {
+                            if (!window.confirm(
+                              `Excluir permanentemente a conta ${user.email}?`
+                            )) return;
+                            if (!window.confirm("Confirma a exclusão definitiva?")) return;
+                            try {
+                              await callAdminFunction({action:"delete",id:user.id});
+                              setAdminUserMessage("Conta excluída.");
+                              await loadManagedUsers();
+                            } catch(error) {
+                              setAdminUserMessage(error.message || "Falha ao excluir conta.");
+                            }
+                          }}><Trash2 size={16}/></button>
+                      </div>
+                    </div>)}
+                  </div>}
+            </section>
+
+            {editingManagedUser && <div style={{
+              position:"fixed",inset:0,zIndex:1000,
+              background:"rgba(0,0,0,.48)",display:"grid",
+              placeItems:"center",padding:16,overflowY:"auto"
+            }}>
+              <section className="cb-panel" role="dialog" aria-modal="true"
+                aria-label="Editar usuário"
+                style={{width:"min(100%,520px)",maxHeight:"90vh",overflowY:"auto"}}>
+                <div className="cb-page-heading">
+                  <div><h2>Editar usuário</h2>
+                    <p>Senha opcional: deixe vazia para não alterar.</p></div>
+                  <button type="button" className="cb-icon-action"
+                    aria-label="Fechar" onClick={() => setEditingManagedUser(null)}>
+                    <X size={18}/>
+                  </button>
+                </div>
+                <form className="cb-product-form" onSubmit={async event => {
+                  event.preventDefault();
+                  try {
+                    await callAdminFunction({
+                      action:"update",
+                      id:editingManagedUser.id,
+                      name:managedUserForm.name.trim(),
+                      email:managedUserForm.email.trim(),
+                      ...(managedUserForm.password
+                        ? {password:managedUserForm.password} : {})
+                    });
+                    setEditingManagedUser(null);
+                    setAdminUserMessage("Usuário atualizado.");
+                    await loadManagedUsers();
+                  } catch(error) {
+                    setAdminUserMessage(error.message || "Falha ao editar usuário.");
+                  }
+                }}>
+                  <label>Nome completo
+                    <input required value={managedUserForm.name}
+                      onChange={e => setManagedUserForm(old => ({...old,name:e.target.value}))}/>
+                  </label>
+                  <label>E-mail
+                    <input required type="email" value={managedUserForm.email}
+                      onChange={e => setManagedUserForm(old => ({...old,email:e.target.value}))}/>
+                  </label>
+                  <label>Nova senha (opcional)
+                    <input type="password" minLength={8}
+                      value={managedUserForm.password}
+                      onChange={e => setManagedUserForm(old => ({...old,password:e.target.value}))}
+                      placeholder="Mínimo de 8 caracteres"/>
+                  </label>
+                  <div className="cb-form-actions">
+                    <button className="cb-primary" type="submit">Salvar alterações</button>
+                    <button className="cb-secondary" type="button"
+                      onClick={() => setEditingManagedUser(null)}>Cancelar</button>
+                  </div>
+                </form>
+              </section>
+            </div>}
           </>}
 
           {tab === "pedidos" && <>
