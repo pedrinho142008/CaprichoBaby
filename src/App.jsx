@@ -463,7 +463,7 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
                     <div className="product-info">
                       <span className="product-category">{product.category}</span>
                       <h3>{product.name}</h3>
-                      <div className="price-line"><strong>{money(product.price)}</strong>{product.oldPrice && <del>{money(product.oldPrice)}</del>}</div>
+                      
                       <button className="add-button" onClick={(e) => { e.stopPropagation(); addToCart(product); }}><Plus size={17} /> Adicionar à sacola</button>
                     </div>
                   </article>
@@ -541,7 +541,7 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
           <div className="product-detail-info">
             <span className="eyebrow">{selectedProduct.category} · Capricho Baby</span>
             <h2>{selectedProduct.name}</h2>
-            <div className="detail-price">{money(selectedProduct.price)} {selectedProduct.oldPrice && <del>{money(selectedProduct.oldPrice)}</del>}</div>
+            
             <span className="detail-tag"><Sparkles size={14} /> {selectedProduct.tag}</span>
             <p className="detail-description">{selectedProduct.description || "Consulte pelo WhatsApp os detalhes e a disponibilidade deste produto."}</p>
             <div className="detail-perks">
@@ -576,7 +576,7 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
                 {getProductPhoto(item)
                   ? <img src={getProductPhoto(item)} alt={item.name} loading="lazy" />
                   : <span>{item.emoji || "🎀"}</span>}
-              </div><div className="cart-item-info"><b>{item.name}</b><strong>{money(item.price)}</strong><div className="qty-control"><button onClick={() => changeQty(item.id, -1)} aria-label="Diminuir quantidade"><Minus size={14} /></button><span>{item.qty}</span><button onClick={() => changeQty(item.id, 1)} aria-label="Aumentar quantidade"><Plus size={14} /></button></div></div><button className="remove-item" onClick={() => setCart((current) => current.filter((p) => p.id !== item.id))} aria-label="Remover produto"><Trash2 size={17} /></button></div>)}</div>
+              </div><div className="cart-item-info"><b>{item.name}</b><div className="qty-control"><button onClick={() => changeQty(item.id, -1)} aria-label="Diminuir quantidade"><Minus size={14} /></button><span>{item.qty}</span><button onClick={() => changeQty(item.id, 1)} aria-label="Aumentar quantidade"><Plus size={14} /></button></div></div><button className="remove-item" onClick={() => setCart((current) => current.filter((p) => p.id !== item.id))} aria-label="Remover produto"><Trash2 size={17} /></button></div>)}</div>
             <div className="drawer-footer"><div className="subtotal"><span>Total dos produtos</span><strong>{money(cartTotal)}</strong></div><p><MessageCircle size={15} /> A entrega será combinada pelo WhatsApp.</p><button className="checkout-button" onClick={checkout}>Finalizar pelo WhatsApp <ArrowRight size={18} /></button><button className="continue-button" onClick={() => setCartOpen(false)}>Continuar comprando</button></div></>}
         </aside>
       </div>}
@@ -589,7 +589,7 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
                 {getProductPhoto(item)
                   ? <img src={getProductPhoto(item)} alt={item.name} loading="lazy" />
                   : <span>{item.emoji || "🎀"}</span>}
-              </div><div className="cart-item-info"><b>{item.name}</b><strong>{money(item.price)}</strong><button className="favorite-add" onClick={() => addToCart(item)}><Plus size={14} /> Adicionar à sacola</button></div><button className="remove-item" onClick={() => toggleFavorite(item)} aria-label="Remover favorito"><Heart size={17} fill="currentColor" /></button></div>)}</div>}
+              </div><div className="cart-item-info"><b>{item.name}</b><button className="favorite-add" onClick={() => addToCart(item)}><Plus size={14} /> Adicionar à sacola</button></div><button className="remove-item" onClick={() => toggleFavorite(item)} aria-label="Remover favorito"><Heart size={17} fill="currentColor" /></button></div>)}</div>}
         </aside>
       </div>}
 
