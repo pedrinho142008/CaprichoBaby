@@ -118,9 +118,66 @@ function AdminPanel({ products: externalProducts, setProducts: setExternalProduc
     try { localStorage.setItem("caprichobaby_waitlist", JSON.stringify(waitlist)); } catch {}
   }, [waitlist]);
 
+  // CAPRICHOBABY_SUPABASE_CATEGORIES_V1
   useEffect(() => {
-    try { localStorage.setItem("caprichobaby_categories", JSON.stringify(categories)); } catch {}
-  }, [categories]);
+    let cancelled = false;
+
+    async function loadAndMigrateCategories() {
+      const saved = read("caprichobaby_categories", []);
+      const legacy = Array.isArray(saved)
+        ? saved.filter((name) => typeof name === "string" && name.trim())
+        : [];
+      const desired = [...new Set([...DEFAULT_CATEGORIES, ...legacy].map((name) => name.trim()))];
+
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, active")
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Erro ao carregar categorias:", error);
+        flash("Não foi possível carregar as categorias do Supabase.");
+        return;
+      }
+
+      const existing = data || [];
+
+      for (const name of desired) {
+        const match = existing.find(
+          (item) => item.name.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR")
+        );
+
+        if (!match) {
+          const { error: insertError } = await supabase
+            .from("categories")
+            .insert({ name, active: true });
+
+          if (insertError) {
+            console.error("Erro ao migrar categoria:", name, insertError);
+          }
+        }
+      }
+
+      const { data: refreshed, error: refreshError } = await supabase
+        .from("categories")
+        .select("name")
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+
+      if (refreshError) {
+        console.error("Erro ao atualizar categorias:", refreshError);
+        return;
+      }
+
+      if (!cancelled) {
+        const names = [...new Set((refreshed || []).map((item) => item.name))];
+        setCategories(names.length ? names : DEFAULT_CATEGORIES);
+      }
+    }
+
+    loadAndMigrateCategories();
+    return () => { cancelled = true; };
+  }, []);
 
 
   useEffect(() => {
@@ -145,13 +202,26 @@ function AdminPanel({ products: externalProducts, setProducts: setExternalProduc
     ? SHOE_SIZES
     : SIZELESS_CATEGORIES.includes(form.category) ? [] : CLOTHING_SIZES;
 
-  function addCategory(event) {
+  async function addCategory(event) {
     event.preventDefault();
     const name = newCategory.trim();
     if (!name) return flash("Digite o nome da categoria.");
+
     if (categories.some((item) => item.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
       return flash("Essa categoria já existe.");
     }
+
+    const { error } = await supabase
+      .from("categories")
+      .insert({ name, active: true });
+
+    if (error) {
+      console.error("Erro ao adicionar categoria:", error);
+      return flash(error.code === "23505"
+        ? "Essa categoria já existe no banco."
+        : "Não foi possível salvar a categoria no Supabase.");
+    }
+
     setCategories((current) => [...current, name]);
     setNewCategory("");
     flash("Categoria adicionada.");
@@ -162,30 +232,85 @@ function AdminPanel({ products: externalProducts, setProducts: setExternalProduc
     setCategoryName(name);
   }
 
-  function saveCategoryEdit(event) {
+  async function saveCategoryEdit(event) {
     event.preventDefault();
+
+    const oldName = editingCategory;
     const name = categoryName.trim();
+
     if (!name) return flash("Digite um nome para a categoria.");
-    if (categories.some((item) => item !== editingCategory && item.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR"))) {
+    if (!oldName) return flash("Selecione uma categoria para renomear.");
+
+    if (categories.some((item) =>
+      item !== oldName &&
+      item.toLocaleLowerCase("pt-BR") === name.toLocaleLowerCase("pt-BR")
+    )) {
       return flash("Já existe uma categoria com esse nome.");
     }
-    setCategories((current) => current.map((item) => item === editingCategory ? name : item));
-    setProducts((current) => current.map((product) => product.category === editingCategory ? { ...product, category: name } : product));
-    if (form.category === editingCategory) updateField("category", name);
-    if (categoryFilter === editingCategory) setCategoryFilter(name);
+
+    if (name === oldName) {
+      setEditingCategory("");
+      setCategoryName("");
+      return;
+    }
+
+    const { error } = await supabase.rpc("rename_product_category", {
+      p_old_name: oldName,
+      p_new_name: name,
+    });
+
+    if (error) {
+      console.error("Erro ao renomear categoria:", error);
+      return flash(
+        error.code === "23505"
+          ? "Já existe uma categoria com esse nome."
+          : error.message?.includes("Categoria não encontrada")
+            ? "Categoria não encontrada ou inativa."
+            : error.message?.includes("Já existe uma categoria")
+              ? "Já existe uma categoria com esse nome."
+              : "Não foi possível renomear a categoria. Confira as permissões e tente novamente."
+      );
+    }
+
+    setCategories((current) =>
+      current.map((item) => item === oldName ? name : item)
+    );
+    setProducts((current) =>
+      current.map((product) =>
+        product.category === oldName
+          ? { ...product, category: name }
+          : product
+      )
+    );
+
+    if (form.category === oldName) updateField("category", name);
+    if (categoryFilter === oldName) setCategoryFilter(name);
+
     setEditingCategory("");
     setCategoryName("");
     flash("Categoria renomeada.");
   }
 
-  function deleteCategory(name) {
+  async function deleteCategory(name) {
     if (products.some((product) => product.category === name)) {
       return flash("Há produtos nessa categoria. Mova-os antes de excluí-la.");
     }
-    if (!window.confirm(`Excluir a categoria "${name}"?`)) return;
+    if (!window.confirm(`Desativar a categoria "${name}"?`)) return;
+
+    const { error } = await supabase
+      .from("categories")
+      .update({ active: false })
+      .eq("name", name)
+      .eq("active", true);
+
+    if (error) {
+      console.error("Erro ao desativar categoria:", error);
+      return flash("Não foi possível desativar a categoria no Supabase.");
+    }
+
     setCategories((current) => current.filter((item) => item !== name));
     if (categoryFilter === name) setCategoryFilter("Todas");
-    flash("Categoria excluída.");
+    flash("Categoria desativada.");
   }
 
   const visibleProducts = useMemo(() => products.filter((p) => {

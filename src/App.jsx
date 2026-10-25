@@ -141,19 +141,40 @@ function App() {
     }, [categories, products]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   useEffect(() => {
-    function loadCategories() {
-      try {
-        const saved = JSON.parse(localStorage.getItem("caprichobaby_categories") || "null");
-        if (Array.isArray(saved) && saved.length) {
-          setCategories(["Todos", ...saved.filter((name) => name !== "Todos")]);
+    let active = true;
+
+    async function loadCategories() {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("name")
+        .eq("active", true)
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Erro ao carregar categorias:", error.message);
+        return;
+      }
+
+      if (active && data) {
+        const names = data
+          .map((item) => item.name)
+          .filter((name) => typeof name === "string" && name.trim());
+
+        if (names.length) {
+          setCategories(["Todos", ...new Set(names.filter(
+            (name) => name.toLocaleLowerCase("pt-BR") !== "todos"
+          ))]);
         }
-      } catch {}
+      }
     }
-    window.addEventListener("storage", loadCategories);
-    window.addEventListener("focus", loadCategories);
+
+    loadCategories();
+    const handleFocus = () => loadCategories();
+    window.addEventListener("focus", handleFocus);
+
     return () => {
-      window.removeEventListener("storage", loadCategories);
-      window.removeEventListener("focus", loadCategories);
+      active = false;
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
