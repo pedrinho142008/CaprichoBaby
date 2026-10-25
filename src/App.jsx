@@ -476,11 +476,6 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
           </div>
         </section>
 
-        <section className="gift-banner container" id="ofertas">
-          <div className="gift-decoration gift-star">✦</div><div className="gift-decoration gift-heart">♡</div>
-          <div className="gift-copy"><span className="eyebrow">Presentear é demonstrar amor</span><h2>Um presente fofo<br />vira uma memória <span>linda.</span></h2><p>Surpreenda alguém especial com um mimo cheio de carinho.</p><button className="primary-button" onClick={() => selectCategory("Presentes")}>Ver ideias para presentear <ArrowRight size={18} /></button></div>
-          <div className="gift-art"><div className="gift-circle"></div><span className="gift-box">🎁</span><span className="gift-teddy">🧸</span><span className="gift-flower">🌼</span></div>
-        </section>
 
         <section className="love-note container" id="atendimento">
           <span className="love-icon"><Heart fill="currentColor" /></span>
