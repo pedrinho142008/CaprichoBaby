@@ -220,7 +220,6 @@ function App() {
     });
   }, [products, category, search]);
 const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
-  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const favoriteProducts = products.filter((p) => favorites.includes(p.id));
 
   function notify(message) {
@@ -260,8 +259,6 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
     const lines = cart.map((item) => [
       `🛍️ *${item.name}*`,
       `Quantidade: ${item.qty}`,
-      `Valor unitário: ${money(item.price)}`,
-      `Subtotal: ${money(item.price * item.qty)}`
     ].join("\n"));
 
     const message = [
@@ -270,7 +267,6 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
       "",
       ...lines,
       "",
-      `*Total dos produtos: ${money(cartTotal)}*`,
       "",
       "Poderiam confirmar a disponibilidade e informar o prazo e o valor da entrega? 🌸"
     ].join("\n");
@@ -558,7 +554,6 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
                 "Tenho interesse neste produto:",
                 "",
                 `🛍️ *${selectedProduct.name}*`,
-                `Valor: ${money(selectedProduct.price)}`,
                 "",
                 "Poderiam informar a disponibilidade e as opções de entrega? 🌸"
               ].join("\n");
@@ -577,7 +572,7 @@ const cartCount = cart.reduce((sum, item) => sum + item.qty, 0);
                   ? <img src={getProductPhoto(item)} alt={item.name} loading="lazy" />
                   : <span>{item.emoji || "🎀"}</span>}
               </div><div className="cart-item-info"><b>{item.name}</b><div className="qty-control"><button onClick={() => changeQty(item.id, -1)} aria-label="Diminuir quantidade"><Minus size={14} /></button><span>{item.qty}</span><button onClick={() => changeQty(item.id, 1)} aria-label="Aumentar quantidade"><Plus size={14} /></button></div></div><button className="remove-item" onClick={() => setCart((current) => current.filter((p) => p.id !== item.id))} aria-label="Remover produto"><Trash2 size={17} /></button></div>)}</div>
-            <div className="drawer-footer"><div className="subtotal"><span>Total dos produtos</span><strong>{money(cartTotal)}</strong></div><p><MessageCircle size={15} /> A entrega será combinada pelo WhatsApp.</p><button className="checkout-button" onClick={checkout}>Finalizar pelo WhatsApp <ArrowRight size={18} /></button><button className="continue-button" onClick={() => setCartOpen(false)}>Continuar comprando</button></div></>}
+            <div className="drawer-footer"><p><MessageCircle size={15} /> A entrega será combinada pelo WhatsApp.</p><button className="checkout-button" onClick={checkout}>Finalizar pelo WhatsApp <ArrowRight size={18} /></button><button className="continue-button" onClick={() => setCartOpen(false)}>Continuar comprando</button></div></>}
         </aside>
       </div>}
 
